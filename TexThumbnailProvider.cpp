@@ -1,12 +1,4 @@
-// THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
-// ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO
-// THE IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A
-// PARTICULAR PURPOSE.
-//
-// Copyright (c) Microsoft Corporation. All rights reserved
-
 #include <shlwapi.h>
-#include <Wincrypt.h>   // For CryptStringToBinary.
 #include <thumbcache.h> // For IThumbnailProvider.
 #include <wincodec.h>   // Windows Imaging Codecs
 #include <msxml6.h>
@@ -15,11 +7,8 @@
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "Crypt32.lib")
-#pragma comment(lib, "msxml6.lib")
 
-// this thumbnail provider implements IInitializeWithStream to enable being hosted
-// in an isolated process for robustness
-
+#include <memory>
 #include "s3tc.h"
 
 class CRecipeThumbProvider : public IInitializeWithStream,
@@ -99,6 +88,7 @@ IFACEMETHODIMP CRecipeThumbProvider::Initialize(IStream *pStream, DWORD)
     }
     return hr;
 }
+
 
 enum tex_format {
     tex_format_etc1 = 0x1,
@@ -192,33 +182,30 @@ HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE*
         const UINT blockSize = header.tex_format == tex_format_dxt5 ? 16 : 8;
         const UINT dataSize = blockWidth * blockHeight * blockSize;
 
-        uint8_t* dxtData = (uint8_t*)malloc(dataSize);
+        auto dxtData = std::make_unique<uint8_t*>((uint8_t *) malloc(dataSize));
         if (!dxtData)
             return E_OUTOFMEMORY;
 
-        hr = pTexStream->Read(dxtData, dataSize, &bytesRead);
+        hr = pTexStream->Read(*dxtData, dataSize, &bytesRead);
         if (FAILED(hr) || bytesRead != dataSize)
         {
-            free(dxtData);
             return E_FAIL;
         }
 
-        // Allocate buffer for output image (BGRA 32-bit)
-        unsigned long* image = (unsigned long*)malloc(stride * height);
+        auto image = std::make_unique<unsigned long*>((unsigned long*) malloc(stride * height));
         if (!image)
         {
-            free(dxtData);
             return E_OUTOFMEMORY;
         }
 
         if (header.tex_format == tex_format_dxt5) {
-            BlockDecompressImageDXT5(width, height, dxtData, image);
+            BlockDecompressImageDXT5(width, height, *dxtData, *image);
         }
         else {
-            BlockDecompressImageDXT1(width, height, dxtData, image);
+            BlockDecompressImageDXT1(width, height, *dxtData, *image);
         }
 
-        free(dxtData);
+        // Todo: crop mipmaps sommehow </3
 
         BITMAPINFO bmi = {};
         bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
@@ -229,45 +216,40 @@ HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE*
         bmi.bmiHeader.biCompression = BI_RGB;
 
         void* bits;
-
-        unsigned long* finalImage = (unsigned long*)malloc(stride * height);
+        
+        auto finalImage = std::make_unique<unsigned long*>((unsigned long*) malloc(stride * height));
         if (!finalImage)
         {
-            free(image);
             return E_OUTOFMEMORY;
         }
 
-        
         for (size_t i = 0; i < width * height; ++i)
         {
-            unsigned long rgba = image[i];
+            unsigned long rgba = (*image)[i];
             unsigned char r = (rgba >> 24) & 0xFF;
             unsigned char g = (rgba >> 16) & 0xFF;
             unsigned char b = (rgba >> 8) & 0xFF;
             unsigned char a = rgba & 0xFF;
 
-            finalImage[i] = (
+            (*finalImage)[i] = (
                 (unsigned long)a << 24) |
                 ((unsigned long)r << 16) |
                 ((unsigned long)g << 8) |
                 ((unsigned long)b);
         }
         
-        free(image);
-        image = finalImage;
+        image = std::move(finalImage);
 
         HBITMAP hBitmap = CreateDIBSection(NULL, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
         if (!hBitmap)
         {
-            free(image);
             return E_OUTOFMEMORY;
         }
 
-        memcpy(bits, image, stride * height);
+        memcpy(bits, *image, stride * height);
         *phbmp = hBitmap;
         *pdwAlpha = WTSAT_ARGB;
 
-        free(image);
         return S_OK;
     }
 

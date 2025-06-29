@@ -129,13 +129,13 @@
     </ClCompile>
     <Link>
       <OutputFile>$(OutDir)TexThumbnailProvider.dll</OutputFile>
-      <ModuleDefinitionFile>RecipeThumbnailProvider.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>TexThumbnailProvider.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ProgramDatabaseFile>$(OutDir)RecipeHandlers.pdb</ProgramDatabaseFile>
       <SubSystem>Windows</SubSystem>
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
       <DataExecutionPrevention>true</DataExecutionPrevention>
-      <ImportLibrary>$(OutDir)RecipeThumbnailProvider.lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)TexThumbnailProvider.lib</ImportLibrary>
       <TargetMachine>MachineX64</TargetMachine>
     </Link>
   </ItemDefinitionGroup>
@@ -174,23 +174,23 @@
     </ClCompile>
     <Link>
       <OutputFile>$(OutDir)TexThumbnailProvider.dll</OutputFile>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
       <DataExecutionPrevention>true</DataExecutionPrevention>
-      <ImportLibrary>$(OutDir)RecipeThumbnailProvider.lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)TexThumbnailProvider.lib</ImportLibrary>
       <TargetMachine>MachineX64</TargetMachine>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="chocolatechipcookies.recipe" />
-    <None Include="RecipeThumbnailProvider.def" />
+    <None Include="TexThumbnailProvider.def" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Dll.cpp" />
-    <ClCompile Include="RecipeThumbnailProvider.cpp" />
+    <ClCompile Include="TexThumbnailProvider.cpp" />
     <ClCompile Include="s3tc.cpp" />
   </ItemGroup>
   <ItemGroup>
