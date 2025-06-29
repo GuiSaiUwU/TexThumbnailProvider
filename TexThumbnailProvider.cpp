@@ -205,7 +205,7 @@ HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE*
             BlockDecompressImageDXT1(width, height, *dxtData, *image);
         }
 
-        // Todo: crop mipmaps sommehow </3
+        // Todo: crop mipmaps somehow </3
 
         BITMAPINFO bmi = {};
         bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
@@ -222,7 +222,8 @@ HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE*
         {
             return E_OUTOFMEMORY;
         }
-
+        
+        // RGBA -> ARGB
         for (size_t i = 0; i < width * height; ++i)
         {
             unsigned long rgba = (*image)[i];
