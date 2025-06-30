@@ -8,18 +8,30 @@
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "Crypt32.lib")
 
-#include <memory>
+#include <memory> // Smart Pointers >w<
 #include "s3tc.h"
 
-class CRecipeThumbProvider : public IInitializeWithStream,
+
+#if defined(_MSC_VER)
+#include <intrin.h> // _BitScanReverse64
+static inline unsigned int LEADING_ZEROS(unsigned int x) {
+    unsigned long idx;
+    if (_BitScanReverse64(&idx, x))
+        return 31 - idx;
+    else
+        return 32;
+}
+#endif
+
+class CTexThumbProvider : public IInitializeWithStream,
                              public IThumbnailProvider
 {
 public:
-    CRecipeThumbProvider() : _cRef(1), _pStream(NULL)
+    CTexThumbProvider() : _cRef(1), _pStream(NULL)
     {
     }
 
-    virtual ~CRecipeThumbProvider()
+    virtual ~CTexThumbProvider()
     {
         if (_pStream)
         {
@@ -32,8 +44,8 @@ public:
     {
         static const QITAB qit[] =
         {
-            QITABENT(CRecipeThumbProvider, IInitializeWithStream),
-            QITABENT(CRecipeThumbProvider, IThumbnailProvider),
+            QITABENT(CTexThumbProvider, IInitializeWithStream),
+            QITABENT(CTexThumbProvider, IThumbnailProvider),
             { 0 },
         };
         return QISearch(this, qit, riid, ppv);
@@ -65,9 +77,9 @@ private:
     IStream *_pStream;     // provided during initialization.
 };
 
-HRESULT CRecipeThumbProvider_CreateInstance(REFIID riid, void **ppv)
+HRESULT CTexThumbProvider_CreateInstance(REFIID riid, void **ppv)
 {
-    CRecipeThumbProvider *pNew = new (std::nothrow) CRecipeThumbProvider();
+    CTexThumbProvider *pNew = new (std::nothrow) CTexThumbProvider();
     HRESULT hr = pNew ? S_OK : E_OUTOFMEMORY;
     if (SUCCEEDED(hr))
     {
@@ -78,7 +90,7 @@ HRESULT CRecipeThumbProvider_CreateInstance(REFIID riid, void **ppv)
 }
 
 // IInitializeWithStream
-IFACEMETHODIMP CRecipeThumbProvider::Initialize(IStream *pStream, DWORD)
+IFACEMETHODIMP CTexThumbProvider::Initialize(IStream *pStream, DWORD)
 {
     HRESULT hr = E_UNEXPECTED;  // can only be inited once
     if (_pStream == NULL)
@@ -117,6 +129,15 @@ void swapUInt8(uint8_t* a, uint8_t* b) {
     *b = temp;
 }
 
+int get_num_mipmaps(int width, int height) {
+    int num = 0;
+    while (width > 1 || height > 1) {
+        if (width > 1) width >>= 1;
+        if (height > 1) height >>= 1;
+        ++num;
+    }
+    return num;
+}
 
 HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE* pdwAlpha)
 {
@@ -133,12 +154,14 @@ HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE*
     if (memcmp(header.magic, "TEX", 3) != 0)
         return E_INVALIDARG;
 
-    const UINT width = header.image_width;
-    const UINT height = header.image_height;
-    const UINT stride = width * 4;
+    UINT width = header.image_width;
+    UINT height = header.image_height;
 
     if (header.tex_format == tex_format_bgra8)
     {
+
+        UINT stride = width * 4;
+
         const UINT imageSize = stride * height;
 
         BYTE* pixelData = (BYTE*)malloc(imageSize);
@@ -177,10 +200,39 @@ HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE*
     }
     else if (header.tex_format == tex_format_dxt5 || header.tex_format == tex_format_dxt1)
     {
+        const UINT blockSize = header.tex_format == tex_format_dxt5 ? 16 : 8;
+        UINT dataSize;
+
+        if (header.has_mipmaps) {
+            
+            unsigned int mipMapCount = get_num_mipmaps(header.image_width, header.image_height);
+            
+            UINT skip = 0;
+            // block_size = 4 for dxt5 and dxt1
+            // Note (+ block_size - 1) simplified to +3 bcs 4 - 1
+            for (auto x = mipMapCount; x > 0; x--) {
+                auto curr_width = max(width / (1 << x), 1);
+                auto curr_height = max(height / (1 << x), 1);
+
+                auto blockWidth = (curr_width + 3) / 4;
+                auto blockHeight = (curr_height + 3) / 4;
+                skip += blockSize * blockWidth * blockHeight;
+            }
+
+            LARGE_INTEGER liSkip;
+            liSkip.QuadPart = skip;
+
+            hr = pTexStream->Seek(liSkip, STREAM_SEEK_CUR, NULL);
+            if (FAILED(hr)) {
+                return hr;
+            }
+        }
+
         const UINT blockWidth = (width + 3) / 4;
         const UINT blockHeight = (height + 3) / 4;
-        const UINT blockSize = header.tex_format == tex_format_dxt5 ? 16 : 8;
-        const UINT dataSize = blockWidth * blockHeight * blockSize;
+        dataSize = blockWidth * blockHeight * blockSize;
+
+        UINT stride = width * 4;
 
         auto dxtData = std::make_unique<uint8_t*>((uint8_t *) malloc(dataSize));
         if (!dxtData)
@@ -198,14 +250,13 @@ HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE*
             return E_OUTOFMEMORY;
         }
 
+
         if (header.tex_format == tex_format_dxt5) {
             BlockDecompressImageDXT5(width, height, *dxtData, *image);
         }
         else {
             BlockDecompressImageDXT1(width, height, *dxtData, *image);
         }
-
-        // Todo: crop mipmaps somehow </3
 
         BITMAPINFO bmi = {};
         bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
@@ -259,7 +310,7 @@ HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE*
 
 
 // IThumbnailProvider
-IFACEMETHODIMP CRecipeThumbProvider::GetThumbnail(UINT /* cx */, HBITMAP* phbmp, WTS_ALPHATYPE* pdwAlpha)
+IFACEMETHODIMP CTexThumbProvider::GetThumbnail(UINT /* cx */, HBITMAP* phbmp, WTS_ALPHATYPE* pdwAlpha)
 {
     HRESULT hr = CreateHBitmapFromTex(this->_pStream, phbmp, pdwAlpha);
 

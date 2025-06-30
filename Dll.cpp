@@ -11,12 +11,13 @@
 #include <shlobj.h>     // For SHChangeNotify
 #include <new>
 
-extern HRESULT CRecipeThumbProvider_CreateInstance(REFIID riid, void **ppv);
 
-#define SZ_CLSID_RECIPETHUMBHANDLER     L"{243B3EEC-8FD0-44CD-95AD-BEAFDCE52CBF}"
-#define SZ_RECIPETHUMBHANDLER           L"Tex Thumbnail Handler"
+extern HRESULT CTexThumbProvider_CreateInstance(REFIID riid, void **ppv);
 
-const CLSID CLSID_RecipeThumbHandler    = { 0x243b3eec, 0x8fd0, 0x44cd, { 0x95, 0xad, 0xbe, 0xaf, 0xdc, 0xe5, 0x2c, 0xbf } };
+#define SZ_CLSID_TexTHUMBHANDLER     L"{243B3EEC-8FD0-44CD-95AD-BEAFDCE52CBF}"
+#define SZ_TexTHUMBHANDLER           L"Tex Thumbnail Handler"
+
+const CLSID CLSID_TexThumbHandler    = { 0x243b3eec, 0x8fd0, 0x44cd, { 0x95, 0xad, 0xbe, 0xaf, 0xdc, 0xe5, 0x2c, 0xbf } };
 
 typedef HRESULT (*PFNCREATEINSTANCE)(REFIID riid, void **ppvObject);
 struct CLASS_OBJECT_INIT
@@ -28,7 +29,7 @@ struct CLASS_OBJECT_INIT
 // add classes supported by this module here
 const CLASS_OBJECT_INIT c_rgClassObjectInit[] =
 {
-    { &CLSID_RecipeThumbHandler, CRecipeThumbProvider_CreateInstance }
+    { &CLSID_TexThumbHandler, CTexThumbProvider_CreateInstance }
 };
 
 
@@ -199,10 +200,10 @@ STDAPI DllRegisterServer()
         const REGISTRY_ENTRY rgRegistryEntries[] =
         {
             // RootKey            KeyName                                                                ValueName                     Data
-            {HKEY_CURRENT_USER,   L"Software\\Classes\\CLSID\\" SZ_CLSID_RECIPETHUMBHANDLER,                                 NULL,                           SZ_RECIPETHUMBHANDLER},
-            {HKEY_CURRENT_USER,   L"Software\\Classes\\CLSID\\" SZ_CLSID_RECIPETHUMBHANDLER L"\\InProcServer32",             NULL,                           szModuleName},
-            {HKEY_CURRENT_USER,   L"Software\\Classes\\CLSID\\" SZ_CLSID_RECIPETHUMBHANDLER L"\\InProcServer32",             L"ThreadingModel",              L"Apartment"},
-            {HKEY_CURRENT_USER,   L"Software\\Classes\\.tex\\ShellEx\\{e357fccd-a995-4576-b01f-234630154e96}",            NULL,                           SZ_CLSID_RECIPETHUMBHANDLER},
+            {HKEY_CURRENT_USER,   L"Software\\Classes\\CLSID\\" SZ_CLSID_TexTHUMBHANDLER,                                 NULL,                           SZ_TexTHUMBHANDLER},
+            {HKEY_CURRENT_USER,   L"Software\\Classes\\CLSID\\" SZ_CLSID_TexTHUMBHANDLER L"\\InProcServer32",             NULL,                           szModuleName},
+            {HKEY_CURRENT_USER,   L"Software\\Classes\\CLSID\\" SZ_CLSID_TexTHUMBHANDLER L"\\InProcServer32",             L"ThreadingModel",              L"Apartment"},
+            {HKEY_CURRENT_USER,   L"Software\\Classes\\.tex\\ShellEx\\{e357fccd-a995-4576-b01f-234630154e96}",            NULL,                           SZ_CLSID_TexTHUMBHANDLER},
         };
 
         hr = S_OK;
@@ -213,7 +214,7 @@ STDAPI DllRegisterServer()
     }
     if (SUCCEEDED(hr))
     {
-        // This tells the shell to invalidate the thumbnail cache.  This is important because any .recipe files
+        // This tells the shell to invalidate the thumbnail cache.  This is important because any .Tex files
         // viewed before registering this handler would otherwise show cached blank thumbnails.
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
     }
@@ -229,7 +230,7 @@ STDAPI DllUnregisterServer()
 
     const PCWSTR rgpszKeys[] =
     {
-        L"Software\\Classes\\CLSID\\" SZ_CLSID_RECIPETHUMBHANDLER,
+        L"Software\\Classes\\CLSID\\" SZ_CLSID_TexTHUMBHANDLER,
         L"Software\\Classes\\.tex\\ShellEx\\{e357fccd-a995-4576-b01f-234630154e96}"
     };
 
