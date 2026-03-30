@@ -1,27 +1,14 @@
 #include <shlwapi.h>
 #include <thumbcache.h> // For IThumbnailProvider.
 #include <wincodec.h>   // Windows Imaging Codecs
-#include <msxml6.h>
-#include <new>
+#include <new> // std::nothrow
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "windowscodecs.lib")
-#pragma comment(lib, "Crypt32.lib")
 
-#include <memory> // Smart Pointers >w<
+#include <vector>
+#include <algorithm>
 #include "s3tc.h"
-
-
-#if defined(_MSC_VER)
-#include <intrin.h> // _BitScanReverse64
-static inline unsigned int LEADING_ZEROS(unsigned int x) {
-    unsigned long idx;
-    if (_BitScanReverse64(&idx, x))
-        return 31 - idx;
-    else
-        return 32;
-}
-#endif
 
 class CTexThumbProvider : public IInitializeWithStream,
                              public IThumbnailProvider
@@ -110,7 +97,7 @@ enum tex_format {
     tex_format_dxt5 = 0xC,
     tex_format_bgra8 = 0x14
 };
-#define tex_magic "TEX"
+
 
 typedef struct {
     uint8_t magic[4];
@@ -122,12 +109,6 @@ typedef struct {
     bool has_mipmaps;
 } TEX_HEADER;
 
-
-void swapUInt8(uint8_t* a, uint8_t* b) {
-    uint8_t temp = *a;
-    *a = *b;
-    *b = temp;
-}
 
 int get_num_mipmaps(int width, int height) {
     int num = 0;
@@ -256,29 +237,35 @@ HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE*
 
         UINT stride = width * 4;
 
-        auto dxtData = std::make_unique<uint8_t*>((uint8_t *) malloc(dataSize));
-        if (!dxtData)
+        std::vector<uint8_t> dxtData(dataSize);
+        if (dxtData.capacity() < dataSize)
             return E_OUTOFMEMORY;
 
-        hr = pTexStream->Read(*dxtData, dataSize, &bytesRead);
+        hr = pTexStream->Read(dxtData.data(), dataSize, &bytesRead);
         if (FAILED(hr) || bytesRead != dataSize)
-        {
             return E_FAIL;
-        }
 
-        auto imageData = std::make_unique<unsigned long*>((unsigned long*) malloc(stride * height));
-        if (!imageData)
-        {
+        
+        std::vector<unsigned long> imageData(stride * height);
+        if (imageData.capacity() < stride*height)
             return E_OUTOFMEMORY;
-        }
-
-
+        
         if (header.tex_format == tex_format_dxt5) {
-            BlockDecompressImageDXT5(width, height, *dxtData, *imageData);
+            BlockDecompressImageDXT5(width, height, dxtData.data(), imageData.data());
         }
         else {
-            BlockDecompressImageDXT1(width, height, *dxtData, *imageData);
+            BlockDecompressImageDXT1(width, height, dxtData.data(), imageData.data());
         }
+
+        // RGBA -> ARGB
+        std::transform(imageData.begin(), imageData.end(), imageData.begin(),
+        [](uint32_t rgba) {
+            return ((rgba & 0xFF) << 24) |
+                ((rgba >> 24) << 16) |
+                ((rgba >> 16) << 8) |
+                (rgba >> 8);
+        });
+
 
         BITMAPINFO bmi = {};
         bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
@@ -287,40 +274,15 @@ HRESULT CreateHBitmapFromTex(IStream* pTexStream, HBITMAP* phbmp, WTS_ALPHATYPE*
         bmi.bmiHeader.biPlanes = 1;
         bmi.bmiHeader.biBitCount = 32;
         bmi.bmiHeader.biCompression = BI_RGB;
-
+        
         void* bits;
-        
-        auto finalImage = std::make_unique<unsigned long*>((unsigned long*) malloc(stride * height));
-        if (!finalImage)
-        {
-            return E_OUTOFMEMORY;
-        }
-        
-        // RGBA -> ARGB
-        for (size_t i = 0; i < width * height; ++i)
-        {
-            unsigned long rgba = (*imageData)[i];
-            unsigned char r = (rgba >> 24) & 0xFF;
-            unsigned char g = (rgba >> 16) & 0xFF;
-            unsigned char b = (rgba >> 8) & 0xFF;
-            unsigned char a = rgba & 0xFF;
-
-            (*finalImage)[i] = (
-                (unsigned long)a << 24) |
-                ((unsigned long)r << 16) |
-                ((unsigned long)g << 8) |
-                ((unsigned long)b);
-        }
-        
-        imageData = std::move(finalImage);
-
         HBITMAP hBitmap = CreateDIBSection(NULL, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
         if (!hBitmap)
         {
             return E_OUTOFMEMORY;
         }
 
-        memcpy(bits, *imageData, stride * height);
+        memcpy(bits, imageData.data(), stride* height);
         *phbmp = hBitmap;
         *pdwAlpha = WTSAT_ARGB;
 
