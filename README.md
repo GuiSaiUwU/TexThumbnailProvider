@@ -1,55 +1,81 @@
----
-page_type: sample
-languages:
-- cpp
-products:
-- windows-api-win32
-name: Explorer thumbnail provider
-urlFragment: recipethumbnailprovider
-description: Illustrates how to create a Thumbnail provider that extends the explorer, providing thumbnails for a particular file type.
-extendedZipContent:
-- path: LICENSE
-  target: LICENSE
----
+# TexThumbnailProvider
 
-# Explorer thumbnail provider
+Windows Explorer thumbnail provider for `.tex` files.
 
-Illustrates how to create a Thumbnail provider that extends the explorer, providing thumbnails for a particular file type.
+This project builds a COM in-process DLL that registers an `IThumbnailProvider` handler for the `.tex` extension, then decodes supported texture formats into ARGB bitmaps for Explorer thumbnails.
 
-**Note** that Explorer may choose not to show thumbnails even if a provider is available.
-For example, a file that has been archived to tape will not be recalled to obtain its thumbnail.
+## Preview
 
-Debugging thumbnail handlers is difficult for several reasons.
+<p align="center">
+	<img src=".docs/before.png" alt="Explorer view before enabling TexThumbnailProvider" width="696" height="315" />
+</p>
 
-1) The Windows Explorer hosts thumbnail providers in an isolated process to get robustness and improve security. Because of this it is difficult to debug your handler as you cannot set breakpoints on your code in the explorer.exe process as it is not loaded there. The isolated process is DllHost.exe and this is used for other purposes so finding the right instance of this process is difficult. 
+<p align="center">
+	<img src=".docs/after.png" alt="Explorer view after enabling TexThumbnailProvider" width="696" height="315" />
+</p>
 
-2) Once a thumbnail is computed for a particular file it is cached and your handler won�t be called again for that item unless you invalidate the cache by updating the modification date of the file. Note that this cache works even if the files are renamed or moved.
+## Features
 
-Given all of these issues, the easiest way to debug your code is in a test application,
-such as the [UsingThumbnailProviders](https://github.com/microsoft/Windows-classic-samples/tree/master/Samples/Win7Samples/winui/shell/appplatform/UsingThumbnailProviders) sample.
-Once you have proven it works there, test it in the context of Explorer.
+- Shell thumbnail handler for `.tex` files.
+- Explorer integration via COM registration under `HKCU` (current user).
+- Decoding support currently implemented for:
+	- `bgra8`
+	- `dxt1`
+	- `dxt5`
 
-This app will take a command line parameter that names the file to get the thumbnail from and a second param that names the size to request. 
+## Requirements
 
-    ThumbnailProvider.exe <path to your file type> <image size>
+- Windows 10/11
+- Visual Studio 2022 (or Build Tools) with C++ workload
+- CMake 3.20+
 
-Another step you can take to improve the debugging experience
-is to disable the process isolation feature of Explorer.
-You can do this by putting the following named value on the CLSID of your handler:
-
-    HKCR\CLSID\{CLSID of Your Handler}
-        DisableProcessIsolation=REG_DWORD:1
-
-*** Be sure to not ship your handler with this on as customers require the security and robustness benefits of the isolated process feature ***
-
-## Project layout
-
-- `src/` contains the C++ implementation and header files.
-- `TexThumbnailProvider.def` remains at the repository root for DLL exports.
-
-## Build with CMake (Visual Studio generator)
+## Build
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
+
+Build output (default):
+
+- `build/Release/TexThumbnailProvider.dll`
+
+## Install (Register the COM Server)
+
+Run from an elevated (admin) PowerShell or Command Prompt in the repository root:
+
+```powershell
+regsvr32 build\Release\TexThumbnailProvider.dll
+```
+
+After registration, restart Explorer if thumbnails do not refresh immediately.
+
+## Uninstall (Unregister)
+
+```powershell
+regsvr32 /u build\Release\TexThumbnailProvider.dll
+```
+
+## Notes
+
+- Registration is written under `HKEY_CURRENT_USER\Software\Classes`, so it is user-scoped.
+- The handler CLSID is `{243B3EEC-8FD0-44CD-95AD-BEAFDCE52CBF}`.
+- The implementation links against `shlwapi` and `windowscodecs`.
+
+## Troubleshooting
+
+- No thumbnails after registering:
+	- Confirm the DLL exists at `build/Release/TexThumbnailProvider.dll`.
+	- Re-run registration command and ensure it succeeds.
+	- Use the Disk Cleanup for clearing thumbnail cache and restart Explorer .
+
+## Credits
+
+- Benjamin Dobell [s3tc-dxt-decompression](https://github.com/Benjamin-Dobell/s3tc-dxt-decompression)
+- Moritz Bender [Ritoddstex](https://github.com/Morilli/Ritoddstex)
+- Microsoft [RecipeThumbnailProvider](https://github.com/microsoft/Windows-classic-samples/tree/main/Samples/Win7Samples/winui/shell/appshellintegration/RecipeThumbnailProvider)
+
+## License
+
+See `LICENSE.txt`.
+
