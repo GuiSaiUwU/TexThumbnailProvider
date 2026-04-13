@@ -31,21 +31,27 @@ This project builds a COM in-process DLL that registers an `IThumbnailProvider` 
 
 ## Build
 
+Build both architectures with presets:
+
 ```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
+cmake --preset x64
+cmake --build --preset x64-release
+
+cmake --preset x86
+cmake --build --preset x86-release
 ```
 
-Build output (default):
+Build outputs:
 
-- `build/Release/TexThumbnailProvider.dll`
+- `build/x64/Release/TexThumbnailProvider.dll`
+- `build/x86/Release/TexThumbnailProvider.dll`
 
 ## Install (Register the COM Server)
 
 Run from an elevated (admin) PowerShell or Command Prompt in the repository root:
 
 ```powershell
-regsvr32 build\Release\TexThumbnailProvider.dll
+regsvr32 TexThumbnailProvider.dll
 ```
 
 After registration, restart Explorer if thumbnails do not refresh immediately.
